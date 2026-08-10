@@ -1,0 +1,1404 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Le mie Richieste</title>
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Richieste">
+<meta name="theme-color" content="#2f5fe0">
+<link rel="manifest" href="manifest-dipendenti.json">
+<link rel="apple-touch-icon" href="icons/logo-01.png">
+<link rel="icon" type="image/png" href="icons/logo-01.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: { sans: ['Inter','system-ui','sans-serif'], display: ['Manrope','system-ui','sans-serif'] },
+        colors: { brand: { 50:'#eef4ff',100:'#dbe7fe',500:'#2f5fe0',600:'#2549c4',700:'#1e3ba3' } },
+        boxShadow: { soft: '0 2px 10px -2px rgb(15 23 42 / 0.08), 0 1px 2px -1px rgb(15 23 42 / 0.06)' }
+      }
+    }
+  }
+</script>
+<style>
+  :root{ --safe-b: env(safe-area-inset-bottom, 0px); --safe-t: env(safe-area-inset-top, 0px); }
+  html,body{ font-family:'Inter',system-ui,sans-serif; }
+  .font-display{ font-family:'Manrope',system-ui,sans-serif; }
+  .fade-in{ animation:fadeIn .25s ease-out; }
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);} }
+  .pop-in{ animation:popIn .18s ease-out; }
+  @keyframes popIn{ from{opacity:0; transform:scale(.96);} to{opacity:1; transform:scale(1);} }
+  .badge{ font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; white-space:nowrap; }
+  .badge-attesa{ background:#fef3c7; color:#92400e; }
+  .badge-approvata{ background:#dcfce7; color:#166534; }
+  .badge-rifiutata{ background:#fee2e2; color:#991b1b; }
+  .seg-btn{ transition: all .15s ease; }
+  .seg-btn.active{ background:#2f5fe0; color:#fff; box-shadow:0 1px 3px rgba(47,95,224,.35); }
+  #toast-host{ position:fixed; left:50%; bottom:calc(96px + var(--safe-b)); transform:translateX(-50%); z-index:200; display:flex; flex-direction:column-reverse; gap:8px; align-items:center; }
+  .toast{ background:#1e293b; color:#fff; font-size:13px; font-weight:600; padding:10px 16px; border-radius:12px; box-shadow:0 8px 20px -4px rgb(0 0 0 / .3); animation:fadeIn .2s ease-out; }
+  .toast.error{ background:#dc2626; }
+  .toast.success{ background:#16a34a; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased">
+
+<div id="toast-host"></div>
+
+<!-- ============================================================ SPLASH DI AVVIO ============================================================
+     Visibile di default finché non sappiamo ancora se c'è una sessione attiva.
+     Evita che ad ogni refresh (incluso il "pull to refresh" del browser) si
+     veda per un istante la schermata di login prima di tornare all'app. ============================================================ -->
+<div id="boot-splash" class="fixed inset-0 z-[200] bg-slate-50 flex items-center justify-center">
+  <div class="w-8 h-8 rounded-full border-[3px] border-brand-100 border-t-brand-600 animate-spin"></div>
+</div>
+
+<!-- ============================================================ LOGIN ============================================================ -->
+<div id="login-screen" class="hidden h-screen w-screen flex items-center justify-center bg-slate-50 px-4">
+  <form id="login-form" class="w-full max-w-sm bg-white rounded-2xl shadow-lg border border-slate-200 p-7">
+    <div class="text-center mb-5">
+      <div class="flex items-center justify-center gap-4 mb-3">
+        <img id="login-logo-left" alt="" style="width:95px;height:56px;object-fit:contain;object-position:center;">
+        <img id="login-logo-right" alt="" style="width:76px;height:56px;object-fit:contain;object-position:center;">
+      </div>
+      <h1 class="text-lg font-display font-extrabold text-slate-800">Le mie Richieste</h1>
+      <p class="text-xs text-slate-500 mt-1">Accedi con il tuo account dipendente</p>
+    </div>
+    <div class="mb-3">
+      <label class="block text-xs font-semibold text-slate-600 mb-1">Nome utente</label>
+      <input id="login-username" type="text" required autocomplete="username" autocapitalize="characters"
+        class="w-full border border-slate-300 rounded-xl p-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100">
+    </div>
+    <div class="mb-2">
+      <label class="block text-xs font-semibold text-slate-600 mb-1">Password</label>
+      <input id="login-password" type="password" required autocomplete="current-password"
+        class="w-full border border-slate-300 rounded-xl p-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100">
+    </div>
+    <p id="login-error" class="hidden text-xs text-red-600 font-medium mt-3"></p>
+    <button id="login-submit" type="submit"
+      class="w-full mt-4 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm py-3 rounded-xl transition-colors">Accedi</button>
+    <p class="w-full mt-3 text-slate-400 text-[11px] text-center">Nome utente o password dimenticati? Contatta chi gestisce i turni.</p>
+  </form>
+</div>
+
+<!-- ============================================================ CAMBIO PASSWORD OBBLIGATORIO (primo accesso) ============================================================ -->
+<div id="change-password-screen" class="hidden h-screen w-screen flex items-center justify-center bg-slate-50 px-4">
+  <form id="change-password-form" class="w-full max-w-sm bg-white rounded-2xl shadow-lg border border-slate-200 p-7">
+    <div class="text-center mb-5">
+      <h1 class="text-lg font-display font-extrabold text-slate-800">Scegli una nuova password</h1>
+      <p class="text-xs text-slate-500 mt-1">È il tuo primo accesso: imposta una password che ricorderai tu, al posto di quella provvisoria</p>
+    </div>
+    <div class="mb-3">
+      <label class="block text-xs font-semibold text-slate-600 mb-1">Nuova password</label>
+      <input id="change-password-1" type="password" required minlength="6" autocomplete="new-password"
+        class="w-full border border-slate-300 rounded-xl p-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100">
+    </div>
+    <div class="mb-2">
+      <label class="block text-xs font-semibold text-slate-600 mb-1">Conferma nuova password</label>
+      <input id="change-password-2" type="password" required minlength="6" autocomplete="new-password"
+        class="w-full border border-slate-300 rounded-xl p-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100">
+    </div>
+    <p id="change-password-error" class="hidden text-xs text-red-600 font-medium mt-3"></p>
+    <button id="change-password-submit" type="submit"
+      class="w-full mt-4 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm py-3 rounded-xl transition-colors">Conferma e continua</button>
+  </form>
+</div>
+
+
+<!-- ============================================================ APP ============================================================ -->
+<div id="app-root" class="hidden h-screen w-screen flex flex-col overflow-hidden">
+  <header class="bg-brand-600 text-white flex items-center justify-between gap-3 px-4 shrink-0 shadow-md" style="padding-top: calc(.9rem + var(--safe-t)); padding-bottom:.9rem;">
+    <div>
+      <h1 class="font-display font-extrabold text-base leading-tight" id="app-emp-name">—</h1>
+      <p class="text-[11px] text-white/70">Le mie Richieste</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <button onclick="requestSystemNotificationPermission()" id="notif-bell-btn" aria-label="Attiva notifiche" class="hidden w-10 h-10 rounded-lg bg-white/15 hover:bg-white/25 flex items-center justify-center">
+        <i class="fa-regular fa-bell" id="notif-bell-icon"></i>
+      </button>
+      <button onclick="handleLogout()" aria-label="Esci" class="w-10 h-10 rounded-lg bg-white/15 hover:bg-white/25 flex items-center justify-center">
+        <i class="fa-solid fa-right-from-bracket"></i>
+      </button>
+    </div>
+  </header>
+
+  <div class="flex gap-1 bg-slate-100 rounded-xl p-1 mx-4 mt-3 mb-1 shrink-0 no-print">
+    <button onclick="switchTab('turni')" id="tab-turni-btn" class="seg-btn flex-1 py-2.5 rounded-lg text-sm font-semibold text-slate-500">
+      <i class="fa-solid fa-calendar-day mr-1.5"></i>I miei turni
+    </button>
+    <button onclick="switchTab('richieste')" id="tab-richieste-btn" class="seg-btn flex-1 py-2.5 rounded-lg text-sm font-semibold text-slate-500">
+      <i class="fa-solid fa-envelope-open-text mr-1.5"></i>Le mie richieste<span id="richieste-unread-badge" class="hidden ml-1.5 align-middle bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 px-1 inline-flex items-center justify-center">0</span>
+    </button>
+  </div>
+
+  <main class="flex-1 overflow-y-auto p-4 pb-28">
+    <div id="view-turni"></div>
+    <div id="view-richieste" class="hidden"></div>
+  </main>
+
+  <button onclick="openRequestModal()" id="new-request-fab-btn"
+    class="fixed right-5 bottom-8 w-14 h-14 rounded-full bg-brand-600 hover:bg-brand-700 text-white shadow-lg flex items-center justify-center text-xl z-40"
+    style="bottom: calc(1.8rem + var(--safe-b));" aria-label="Nuova richiesta">
+    <i class="fa-solid fa-plus"></i>
+  </button>
+</div>
+
+<!-- ============================================================ TOUR GUIDATO (primo avvio) ============================================================ -->
+<div id="tour-blocker" class="hidden fixed inset-0 z-[108]"></div>
+<div id="tour-highlight" class="hidden fixed z-[109] rounded-2xl pointer-events-none transition-all duration-300 ease-out"></div>
+<div id="tour-tooltip" class="hidden fixed z-[110] bg-white rounded-2xl shadow-2xl p-4 w-[calc(100%-2.5rem)] max-w-xs transition-all duration-300 ease-out pop-in">
+  <div class="flex items-center gap-1.5 mb-2.5" id="tour-dots"></div>
+  <h3 class="font-display font-extrabold text-slate-800 text-sm mb-1" id="tour-step-title"></h3>
+  <p class="text-xs text-slate-500 leading-relaxed mb-4" id="tour-step-text"></p>
+  <div class="flex items-center justify-between">
+    <button onclick="skipAppTour()" class="text-xs font-semibold text-slate-400 hover:text-slate-600 transition-colors">Salta</button>
+    <button onclick="nextTourStep()" id="tour-next-btn" class="bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors">Avanti</button>
+  </div>
+</div>
+
+<!-- ============================================================ MODALE ONBOARDING NOTIFICHE (primo avvio) ============================================================ -->
+<div id="notif-onboarding-backdrop" class="hidden fade-in fixed inset-0 bg-slate-900/50 z-[70] flex items-end sm:items-center justify-center">
+  <div class="pop-in bg-white w-full sm:max-w-sm sm:rounded-2xl rounded-t-2xl shadow-lg p-6 text-center">
+    <div class="w-16 h-16 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center text-2xl mx-auto mb-4">
+      <i class="fa-solid fa-bell"></i>
+    </div>
+    <h2 class="font-display font-extrabold text-slate-800 text-lg mb-2">Resta aggiornato</h2>
+    <p class="text-sm text-slate-500 leading-relaxed mb-6">Attiva le notifiche per sapere subito, anche ad app chiusa, quando una tua richiesta di ferie o cambio turno viene approvata o rifiutata.</p>
+    <button onclick="handleNotifOnboardingAccept()" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm py-3 rounded-xl transition-colors mb-2">Attiva notifiche</button>
+    <button onclick="handleNotifOnboardingDismiss()" class="w-full text-slate-400 hover:text-slate-600 font-medium text-sm py-2 transition-colors">Non ora</button>
+  </div>
+</div>
+
+<!-- ============================================================ MODALE NUOVA RICHIESTA ============================================================ -->
+<div id="request-backdrop" class="hidden fade-in fixed inset-0 bg-slate-900/50 z-50 flex items-end sm:items-center justify-center" onclick="if(event.target===this)closeRequestModal()">
+  <div class="pop-in bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-lg max-h-[92vh] overflow-y-auto">
+    <div class="flex items-center justify-between px-5 pt-5 pb-2">
+      <h2 class="font-display font-extrabold text-slate-800">Nuova richiesta</h2>
+      <button onclick="closeRequestModal()" aria-label="Chiudi" class="w-9 h-9 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="px-5 pb-6">
+      <div class="flex gap-2 mb-4 bg-slate-100 rounded-xl p-1">
+        <button type="button" onclick="setRequestType('ferie')" id="req-type-ferie" class="seg-btn flex-1 py-2 rounded-lg text-sm font-semibold text-slate-600">Ferie</button>
+        <button type="button" onclick="setRequestType('cambio')" id="req-type-cambio" class="seg-btn flex-1 py-2 rounded-lg text-sm font-semibold text-slate-600">Cambio turno</button>
+      </div>
+
+      <!-- FERIE -->
+      <div id="req-ferie-fields">
+        <label class="block text-xs font-semibold text-slate-600 mb-1">Periodo</label>
+        <button type="button" onclick="openDateRangePicker()" id="req-ferie-period-btn"
+          class="w-full flex items-center gap-2.5 border border-slate-300 rounded-xl p-3 text-sm font-medium text-slate-400 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 mb-3 text-left hover:bg-slate-50 transition-colors">
+          <i class="fa-solid fa-calendar-days text-slate-400"></i>
+          <span id="req-ferie-period-label">Seleziona le date...</span>
+        </button>
+        <input id="req-ferie-da" type="hidden">
+        <input id="req-ferie-a" type="hidden">
+      </div>
+
+      <!-- CAMBIO TURNO -->
+      <div id="req-cambio-fields" class="hidden">
+        <label class="block text-xs font-semibold text-slate-600 mb-1">Quale turno vuoi cambiare?</label>
+        <button type="button" onclick="openShiftPicker()" id="req-cambio-shift-btn"
+          class="w-full flex items-center gap-2.5 border border-slate-300 rounded-xl p-3 text-sm font-medium text-slate-400 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 mb-3 text-left hover:bg-slate-50 transition-colors">
+          <i class="fa-solid fa-store text-slate-400"></i>
+          <span id="req-cambio-shift-label" class="flex-1 min-w-0 truncate">Seleziona un turno...</span>
+          <i class="fa-solid fa-chevron-right text-slate-300 text-xs"></i>
+        </button>
+        <input id="req-cambio-shift" type="hidden">
+        <div id="req-cambio-riepilogo" class="hidden bg-brand-50 border border-brand-100 rounded-xl p-3 mb-1">
+          <p class="text-xs font-semibold text-brand-700 mb-0.5"><i class="fa-solid fa-arrows-rotate mr-1"></i>Riepilogo richiesta</p>
+          <p class="text-sm text-brand-800" id="req-cambio-riepilogo-text"></p>
+          <p class="text-[11px] text-brand-600/80 mt-1">Chi gestisce i turni valuterà la richiesta e ti comunicherà dove e quando lavorerai una volta approvata.</p>
+        </div>
+      </div>
+
+      <label class="block text-xs font-semibold text-slate-600 mb-1">Suggerimenti, motivazioni... (opzionale)</label>
+      <textarea id="req-nota" rows="2" class="w-full border border-slate-300 rounded-xl p-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 mb-1" placeholder="Scrivi qui eventuali suggerimenti o il motivo della richiesta..."></textarea>
+
+      <p id="req-error" class="hidden text-xs text-red-600 font-medium mt-2"></p>
+      <button onclick="submitRequest()" id="req-submit-btn" class="w-full mt-4 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm py-3 rounded-xl transition-colors">Invia richiesta</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ MODALE SELEZIONE TURNO (cambio turno) ============================================================ -->
+<div id="shiftpicker-backdrop" class="hidden fade-in fixed inset-0 bg-slate-900/50 z-[60] flex items-end sm:items-center justify-center" onclick="if(event.target===this)closeShiftPicker()">
+  <div class="pop-in bg-white w-full sm:max-w-sm sm:rounded-2xl rounded-t-2xl shadow-lg overflow-hidden max-h-[80vh] flex flex-col" style="padding-bottom: calc(0px + var(--safe-b));">
+    <div class="flex items-center justify-between px-5 pt-5 pb-1 shrink-0">
+      <h2 class="font-display font-extrabold text-slate-800 text-sm">Quale turno vuoi cambiare?</h2>
+      <button onclick="closeShiftPicker()" aria-label="Chiudi" class="w-9 h-9 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <p class="px-5 text-[11px] text-slate-400 mb-2">Tocca il turno che vuoi provare a cambiare</p>
+    <div id="shiftpicker-list" class="overflow-y-auto px-5 pb-5 pt-1"></div>
+  </div>
+</div>
+
+<!-- ============================================================ MODALE CALENDARIO PERSONALIZZATO (selezione periodo ferie) ============================================================ -->
+<div id="daterange-backdrop" class="hidden fade-in fixed inset-0 bg-slate-900/50 z-[60] flex items-end sm:items-center justify-center" onclick="if(event.target===this)closeDateRangePicker()">
+  <div class="pop-in bg-white w-full sm:max-w-sm sm:rounded-2xl rounded-t-2xl shadow-lg overflow-hidden" style="padding-bottom: calc(0px + var(--safe-b));">
+    <div class="flex items-center justify-between px-5 pt-5 pb-1">
+      <h2 class="font-display font-extrabold text-slate-800 text-sm">Seleziona il periodo</h2>
+      <button onclick="closeDateRangePicker()" aria-label="Chiudi" class="w-9 h-9 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <p class="px-5 text-[11px] text-slate-400 mb-2">Tocca il primo giorno, poi l'ultimo. Per un solo giorno, tocca due volte lo stesso giorno o conferma subito.</p>
+
+    <div class="flex items-center justify-between px-5 py-2">
+      <button type="button" onclick="drShiftMonth(-1)" aria-label="Mese precedente" class="w-9 h-9 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500"><i class="fa-solid fa-chevron-left"></i></button>
+      <span id="dr-month-label" class="text-sm font-display font-bold text-slate-800 capitalize"></span>
+      <button type="button" onclick="drShiftMonth(1)" aria-label="Mese successivo" class="w-9 h-9 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500"><i class="fa-solid fa-chevron-right"></i></button>
+    </div>
+
+    <div class="px-5">
+      <div class="grid grid-cols-7 mb-1">
+        <span class="text-center text-[10px] font-bold text-slate-400 py-1">L</span>
+        <span class="text-center text-[10px] font-bold text-slate-400 py-1">M</span>
+        <span class="text-center text-[10px] font-bold text-slate-400 py-1">M</span>
+        <span class="text-center text-[10px] font-bold text-slate-400 py-1">G</span>
+        <span class="text-center text-[10px] font-bold text-slate-400 py-1">V</span>
+        <span class="text-center text-[10px] font-bold text-slate-400 py-1">S</span>
+        <span class="text-center text-[10px] font-bold text-slate-400 py-1">D</span>
+      </div>
+      <div id="dr-grid" class="grid grid-cols-7 gap-y-1 mb-2"></div>
+    </div>
+
+    <div class="flex gap-2 px-5 pb-5 pt-2">
+      <button type="button" onclick="closeDateRangePicker()" class="flex-1 py-2.5 rounded-xl font-semibold text-sm text-slate-600 hover:bg-slate-100">Annulla</button>
+      <button type="button" onclick="confirmDateRangePicker()" class="flex-1 py-2.5 rounded-xl font-semibold text-sm text-white bg-brand-600 hover:bg-brand-700">Conferma</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================================
+   CONFIGURAZIONE SUPABASE — stesso progetto usato dall'app di gestione turni.
+   La chiave qui sotto è la chiave pubblica (anon/publishable): la sicurezza è
+   garantita dalle policy RLS sulla tabella "richieste" (vedi schema_richieste.sql),
+   non dalla segretezza di questa chiave.
+   ===================================================================================== */
+const SUPABASE_URL = 'https://rktxyrrvuidckuseeeff.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_Agw2_S9wZY7MO7fUadCsNQ_UWfw7lbt';
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const EMP_NAME_SEP = '\u200B';
+
+// Stessi loghi (stesso percorso "images/…") usati nella schermata di login
+// dell'app di gestione turni.
+const LOGO_LEFT_DATA_URI = 'images/logo_left_data_uri.png';
+const LOGO_RIGHT_DATA_URI = 'images/logo_right_data_uri.png';
+(function setLoginLogos() {
+  const left = document.getElementById('login-logo-left');
+  const right = document.getElementById('login-logo-right');
+  if (left) { left.src = LOGO_LEFT_DATA_URI; left.alt = 'IdroPower and Pure Life'; }
+  if (right) { right.src = LOGO_RIGHT_DATA_URI; right.alt = 'Italia Promozioni'; }
+})();
+
+let me = null;          // riga employees collegata all'account loggato
+let allEmployees = [];  // per lo schermo "Chi sei?"
+let allMalls = [];
+let myShifts = [];       // turni futuri del dipendente loggato
+let myRequests = [];     // richieste già inviate
+let currentTab = 'turni';
+let currentReqType = 'ferie';
+
+/* =====================================================================================
+   FEEDBACK APTICO E SONORO
+   A differenza dei toni "monofonici" (un solo oscillatore puro) usati nell'app di
+   gestione, qui ogni nota è impastata con due oscillatori leggermente scordati fra loro
+   (unisono/chorus) e passata da un filtro passa-basso: il risultato è un timbro più
+   pieno e morbido, più vicino al feedback sonoro di un'app moderna. I suoni di apertura/
+   chiusura usano invece uno "sweep" di frequenza (glissando), e quelli di conferma/
+   successo/notifica sovrappongono più note vere e proprie (accordi), non solo in
+   sequenza. Ogni tipo di interazione ha un suono e una vibrazione dedicati e
+   riconoscibili, così l'esito si percepisce anche senza guardare lo schermo.
+   ===================================================================================== */
+let audioCtx = null;
+function getAudioCtx() {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return null;
+  if (!audioCtx) audioCtx = new Ctx();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+// Una singola nota "in stereo unisono": due oscillatori scordati di pochi cent invece di
+// uno solo, con inviluppo morbido ed eventuale filtro passa-basso per ammorbidire il
+// timbro. È questo a rendere i suoni pieni e non monofonici.
+function playNote(freq, opts) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  opts = opts || {};
+  const duration = opts.duration ?? .12;
+  const delay = opts.delay ?? 0;
+  const waveform = opts.waveform || 'sine';
+  const gain = opts.gain ?? .07;
+  const detune = opts.detune ?? 6;
+  const filterFreq = opts.filterFreq || null;
+  const t0 = ctx.currentTime + delay;
+
+  const master = ctx.createGain();
+  master.gain.setValueAtTime(0.0001, t0);
+  master.gain.linearRampToValueAtTime(gain, t0 + 0.012);
+  master.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+
+  let outNode = master;
+  if (filterFreq) {
+    const filt = ctx.createBiquadFilter();
+    filt.type = 'lowpass';
+    filt.frequency.value = filterFreq;
+    master.connect(filt);
+    outNode = filt;
+  }
+  outNode.connect(ctx.destination);
+
+  [-1, 1].forEach((sign) => {
+    const osc = ctx.createOscillator();
+    osc.type = waveform;
+    osc.frequency.value = freq;
+    osc.detune.value = sign * detune;
+    osc.connect(master);
+    osc.start(t0);
+    osc.stop(t0 + duration + .03);
+  });
+}
+
+// Nota con "sweep" (glissando) di frequenza: usata per apertura/chiusura di schermate,
+// cambio scheda e logout, dà la sensazione di qualcosa che entra o esce dallo schermo.
+function playSweep(freqFrom, freqTo, opts) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  opts = opts || {};
+  const duration = opts.duration ?? .13;
+  const delay = opts.delay ?? 0;
+  const waveform = opts.waveform || 'sine';
+  const gain = opts.gain ?? .06;
+  const t0 = ctx.currentTime + delay;
+
+  const master = ctx.createGain();
+  master.gain.setValueAtTime(0.0001, t0);
+  master.gain.linearRampToValueAtTime(gain, t0 + 0.015);
+  master.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+  master.connect(ctx.destination);
+
+  [-1, 1].forEach((sign) => {
+    const osc = ctx.createOscillator();
+    osc.type = waveform;
+    osc.frequency.setValueAtTime(Math.max(freqFrom, 1), t0);
+    osc.detune.value = sign * 5;
+    osc.frequency.exponentialRampToValueAtTime(Math.max(freqTo, 1), t0 + duration);
+    osc.connect(master);
+    osc.start(t0);
+    osc.stop(t0 + duration + .03);
+  });
+}
+
+// Un vero "motivo" sonoro per ciascun tipo di interazione (tocco, selezione, cambio
+// scheda, apertura/chiusura, conferma, successo, errore, avviso, notifica, logout).
+function playFeedbackSound(kind) {
+  try {
+    if (kind === 'tap') {
+      playNote(720, { duration: .05, gain: .045, waveform: 'sine', detune: 4, filterFreq: 4000 });
+    } else if (kind === 'select') {
+      // Selezione di un'opzione (giorno, turno, tipo richiesta): un breve "pizzico"
+      // con una seconda nota più acuta subito dopo, come un piccolo scatto/click.
+      playNote(660, { duration: .06, gain: .05, waveform: 'triangle', detune: 5, filterFreq: 5000 });
+      playNote(990, { duration: .05, gain: .035, waveform: 'triangle', delay: .015, detune: 5, filterFreq: 5000 });
+    } else if (kind === 'switch') {
+      playSweep(520, 700, { duration: .09, gain: .05, waveform: 'sine' });
+    } else if (kind === 'open') {
+      // Apertura di una schermata/modale: uno sweep ascendente più un piccolo "pop"
+      // acuto in coda, come qualcosa che si "apre" e si assesta.
+      playSweep(420, 880, { duration: .13, gain: .06, waveform: 'sine' });
+      playNote(1320, { duration: .06, gain: .03, delay: .1, waveform: 'sine', filterFreq: 6000 });
+    } else if (kind === 'close') {
+      playSweep(760, 380, { duration: .11, gain: .05, waveform: 'sine' });
+    } else if (kind === 'confirm') {
+      // Conferma di una scelta (es. periodo ferie): due note ravvicinate che salgono.
+      playNote(587, { duration: .09, gain: .06, waveform: 'sine', detune: 5 });
+      playNote(740, { duration: .11, gain: .06, waveform: 'sine', delay: .06, detune: 5 });
+    } else if (kind === 'success') {
+      // Esito positivo: arpeggio di tre note che sale, con le ultime due sovrapposte
+      // (vero accordo, non solo sequenza) per un "brillio" finale.
+      playNote(659, { duration: .09, gain: .07, waveform: 'sine', detune: 5 });
+      playNote(830, { duration: .1, gain: .07, waveform: 'sine', delay: .07, detune: 5 });
+      playNote(988, { duration: .16, gain: .06, waveform: 'sine', delay: .14, detune: 6, filterFreq: 6000 });
+      playNote(1245, { duration: .16, gain: .045, waveform: 'sine', delay: .14, detune: 6, filterFreq: 6000 });
+    } else if (kind === 'error') {
+      // Due frequenze vicine suonate insieme (leggero "battimento" dissonante) più
+      // una nota grave in coda: percepibile come esito negativo senza essere sgradevole.
+      playNote(220, { duration: .16, gain: .06, waveform: 'sawtooth', detune: 10, filterFreq: 1400 });
+      playNote(233, { duration: .16, gain: .05, waveform: 'sawtooth', detune: 10, filterFreq: 1400 });
+      playNote(165, { duration: .18, gain: .05, waveform: 'sawtooth', delay: .1, detune: 10, filterFreq: 1200 });
+    } else if (kind === 'warning') {
+      playNote(440, { duration: .11, gain: .06, waveform: 'triangle', detune: 6 });
+      playNote(330, { duration: .14, gain: .06, waveform: 'triangle', delay: .09, detune: 6 });
+    } else if (kind === 'logout') {
+      playSweep(600, 260, { duration: .2, gain: .05, waveform: 'triangle' });
+    } else if (kind === 'notify') {
+      // "Ding" tipo notifica: tre armoniche (fondamentale, ottava, quinta) sovrapposte
+      // con decadimento lento, come un piccolo campanello.
+      playNote(880, { duration: .5, gain: .06, waveform: 'sine', detune: 3, filterFreq: 6000 });
+      playNote(1320, { duration: .45, gain: .04, waveform: 'sine', detune: 3, delay: .02, filterFreq: 6000 });
+      playNote(1760, { duration: .4, gain: .025, waveform: 'sine', detune: 3, delay: .04, filterFreq: 7000 });
+    } else {
+      playNote(520, { duration: .08, gain: .06, waveform: 'sine', detune: 5 });
+    }
+  } catch (e) { /* audio non disponibile: non deve mai bloccare l'operazione */ }
+}
+
+// Pattern di vibrazione differenziati (falliscono silenziosamente dove non supportati).
+function triggerHaptic(kind) {
+  if (!navigator.vibrate) return;
+  const patterns = {
+    tap: [6],
+    select: [8],
+    switch: [7],
+    open: [10],
+    close: [8],
+    confirm: [12],
+    success: [15],
+    error: [25, 40, 25],
+    warning: [18, 30, 18, 30, 18],
+    logout: [12, 25],
+    notify: [10, 30, 10],
+    info: [10]
+  };
+  try { navigator.vibrate(patterns[kind] || patterns.tap); } catch (e) {}
+}
+
+// Punto unico da richiamare ad ogni interazione: fa scattare insieme aptico e sonoro.
+function feedback(kind) {
+  triggerHaptic(kind);
+  playFeedbackSound(kind);
+}
+
+/* ---------------------------------------------------------------- util UI ---- */
+function showToast(message, type, feedbackKind) {
+  feedback(feedbackKind || type || 'info');
+  const host = document.getElementById('toast-host');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.textContent = message;
+  host.appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+function displayName(fullName) {
+  if (!fullName) return '';
+  if (fullName.startsWith(EMP_NAME_SEP)) return fullName.slice(EMP_NAME_SEP.length).trim();
+  return fullName;
+}
+function fmtDate(d) {
+  const dt = (d instanceof Date) ? d : new Date(d + 'T00:00:00');
+  return dt.toLocaleDateString('it-IT', { weekday: 'short', day: '2-digit', month: 'short' });
+}
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function hideBootSplash() {
+  const el = document.getElementById('boot-splash');
+  if (el) el.classList.add('hidden');
+}
+function showLoginScreen() {
+  hideBootSplash();
+  ['login-screen','change-password-screen','app-root'].forEach(id => document.getElementById(id).classList.add('hidden'));
+  document.getElementById('login-screen').classList.remove('hidden');
+}
+function showChangePasswordScreen() {
+  hideBootSplash();
+  ['login-screen','change-password-screen','app-root'].forEach(id => document.getElementById(id).classList.add('hidden'));
+  document.getElementById('change-password-screen').classList.remove('hidden');
+}
+function showAppRoot() {
+  hideBootSplash();
+  ['login-screen','change-password-screen','app-root'].forEach(id => document.getElementById(id).classList.add('hidden'));
+  document.getElementById('app-root').classList.remove('hidden');
+}
+
+/* ---------------------------------------------------------------- auth ---- */
+document.getElementById('login-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const errorEl = document.getElementById('login-error');
+  errorEl.classList.add('hidden');
+  const identifier = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  const btn = document.getElementById('login-submit');
+  btn.disabled = true; btn.textContent = 'Accesso in corso...';
+
+  // Il dipendente digita lo username (es. MCASSANO); internamente serve
+  // un'email per Supabase Auth, quindi la recuperiamo dalla tabella employees.
+  // Se qualcuno digita direttamente un'email (nel caso in futuro venga
+  // collegata manualmente), la usiamo così com'è.
+  let authEmail = identifier;
+  if (!identifier.includes('@')) {
+    const { data: empRow } = await supabaseClient
+      .from('employees')
+      .select('auth_email')
+      .eq('username', identifier.toUpperCase())
+      .maybeSingle();
+    if (!empRow || !empRow.auth_email) {
+      btn.disabled = false; btn.textContent = 'Accedi';
+      errorEl.textContent = 'Nome utente o password non corretti.';
+      errorEl.classList.remove('hidden');
+      feedback('error');
+      return;
+    }
+    authEmail = empRow.auth_email;
+  }
+
+  const { error } = await supabaseClient.auth.signInWithPassword({ email: authEmail, password });
+  btn.disabled = false; btn.textContent = 'Accedi';
+  if (error) {
+    errorEl.textContent = 'Nome utente o password non corretti.';
+    errorEl.classList.remove('hidden');
+    feedback('error');
+    return;
+  }
+  feedback('success');
+  await initAfterAuth();
+});
+
+document.getElementById('change-password-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const errorEl = document.getElementById('change-password-error');
+  errorEl.classList.add('hidden');
+  const pw1 = document.getElementById('change-password-1').value;
+  const pw2 = document.getElementById('change-password-2').value;
+  if (pw1 !== pw2) {
+    errorEl.textContent = 'Le due password non coincidono.';
+    errorEl.classList.remove('hidden');
+    feedback('error');
+    return;
+  }
+  const btn = document.getElementById('change-password-submit');
+  btn.disabled = true; btn.textContent = 'Salvataggio...';
+
+  const { error: pwErr } = await supabaseClient.auth.updateUser({ password: pw1 });
+  if (pwErr) {
+    btn.disabled = false; btn.textContent = 'Conferma e continua';
+    errorEl.textContent = 'Impossibile salvare la nuova password. Riprova.';
+    errorEl.classList.remove('hidden');
+    feedback('error');
+    return;
+  }
+
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  await supabaseClient.from('employees').update({ must_change_password: false }).eq('auth_user_id', user.id);
+
+  btn.disabled = false; btn.textContent = 'Conferma e continua';
+  document.getElementById('change-password-1').value = '';
+  document.getElementById('change-password-2').value = '';
+  feedback('success');
+  await initAfterAuth();
+});
+
+async function handleLogout() {
+  feedback('logout');
+  await supabaseClient.auth.signOut();
+  me = null;
+  showLoginScreen();
+}
+
+async function initAfterAuth() {
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  if (!user) { showLoginScreen(); return; }
+
+  const { data: empRow } = await supabaseClient.from('employees').select('*').eq('auth_user_id', user.id).maybeSingle();
+  if (!empRow) {
+    // Non dovrebbe succedere con il nuovo flusso (l'account arriva già
+    // collegato quando viene creato dalla scheda dipendente): se capita,
+    // è un problema da segnalare a chi gestisce i turni.
+    showToast('Account non collegato a nessun dipendente. Contatta chi gestisce i turni.', 'error');
+    await supabaseClient.auth.signOut();
+    showLoginScreen();
+    return;
+  }
+  if (empRow.must_change_password) {
+    showChangePasswordScreen();
+    return;
+  }
+  me = empRow;
+  document.getElementById('app-emp-name').textContent = displayName(me.full_name);
+  showAppRoot();
+  await loadAllData();
+  switchTab('turni', true);
+  subscribeMyRichiesteRealtime();
+  updateNotifBellIcon();
+  maybeStartAppTour();
+  setupTourResetTrigger();
+}
+
+/* ---------------------------------------------------------------- dati ---- */
+async function loadAllData() {
+  const [empsRes, mallsRes, shiftsRes, reqRes] = await Promise.all([
+    supabaseClient.from('employees').select('id,full_name'),
+    supabaseClient.from('malls').select('id,name,hours'),
+    supabaseClient.from('shifts').select('*, malls(name)').eq('employee_id', me.id).gte('shift_date', todayStr()).order('shift_date'),
+    supabaseClient.from('richieste').select('*, malls!richieste_mall_id_fkey(name), mall_desiderato:malls!richieste_mall_desiderato_id_fkey(name)').eq('employee_id', me.id).order('created_at', { ascending: false })
+  ]);
+  allEmployees = (empsRes.data || []).filter(e => e.id !== me.id);
+  allMalls = mallsRes.data || [];
+  myShifts = shiftsRes.data || [];
+  myRequests = reqRes.data || [];
+  renderTurni();
+  renderRichieste();
+  renderCambioShiftOptions();
+  updateUnreadBadge();
+}
+
+/* ---------------------------------------------------------------- notifiche in-app ----
+   Nessun invio email/push: solo un pallino sul tab "Le mie richieste" quando una
+   richiesta è stata approvata/rifiutata da quando l'hai controllata l'ultima volta,
+   più un avviso al momento dell'apertura dell'app. Il "letto" è salvato solo su
+   questo dispositivo (localStorage), non lato server. */
+function lastSeenKey() { return `richieste_seen_${me.id}`; }
+function getLastSeenTs() { return localStorage.getItem(lastSeenKey()) || '1970-01-01T00:00:00.000Z'; }
+function markRichiesteAsSeen() {
+  localStorage.setItem(lastSeenKey(), new Date().toISOString());
+  updateUnreadBadge();
+}
+function countUnreadRichieste() {
+  const lastSeen = getLastSeenTs();
+  return myRequests.filter(r => r.stato !== 'in_attesa' && r.resolved_at && r.resolved_at > lastSeen).length;
+}
+function updateUnreadBadge() {
+  const n = countUnreadRichieste();
+  const badge = document.getElementById('richieste-unread-badge');
+  badge.textContent = n;
+  badge.classList.toggle('hidden', n === 0);
+}
+
+/* --------------------------------------------------------------------------------
+   NOTIFICHE DI SISTEMA (pannello del telefono, con vibrazione). Richiedono il
+   permesso del browser (icona a campanella in alto) e si appoggiano a un service
+   worker dedicato (sw-dipendenti.js) tramite showNotification, così restano
+   visibili anche con l'app in background/altra scheda. Quando la richiesta di
+   un dipendente viene approvata/rifiutata riceve subito l'avviso, tramite una
+   sottoscrizione realtime a Supabase — non deve riaprire l'app.
+   -------------------------------------------------------------------------------- */
+function updateNotifBellIcon() {
+  const icon = document.getElementById('notif-bell-icon');
+  if (!icon) return;
+  if (!('Notification' in window)) { icon.className = 'fa-regular fa-bell-slash'; return; }
+  icon.className = Notification.permission === 'granted' ? 'fa-solid fa-bell' : 'fa-regular fa-bell';
+}
+
+async function requestSystemNotificationPermission() {
+  if (!('Notification' in window)) { showToast('Le notifiche di sistema non sono supportate su questo browser', 'error'); return; }
+  if (Notification.permission === 'granted') { showToast('Notifiche già attive', 'info'); return; }
+  if (Notification.permission === 'denied') { showToast('Notifiche bloccate: riattivale dalle impostazioni del sito nel browser', 'error'); return; }
+  const result = await Notification.requestPermission();
+  updateNotifBellIcon();
+  if (result === 'granted') {
+    showToast('Notifiche di sistema attivate', 'success', 'notify');
+    showSystemNotification('Notifiche attivate', 'Riceverai un avviso quando una tua richiesta viene gestita', 'notif-test');
+  } else if (result === 'denied') {
+    showToast('Notifiche bloccate: puoi riattivarle dalle impostazioni del sito nel browser', 'error');
+  }
+}
+
+/* ---------------------------------------------------------------- tour guidato (primo avvio) ----
+   Percorso introduttivo essenziale (solo le basi: turni + invio richiesta), mostrato
+   una sola volta al primo accesso, PRIMA del prompt notifiche. Evidenzia con uno
+   "spotlight" (il resto dello schermo si scurisce) gli elementi chiave dell'app,
+   uno alla volta, con un fumetto che li spiega — come nelle app moderne. ---- */
+const APP_TOUR_KEY = 'appTourSeen_dipendenti';
+
+const APP_TOUR_STEPS = [
+  {
+    target: '#tab-turni-btn',
+    title: 'I tuoi turni',
+    text: 'Qui trovi tutti i turni già pubblicati per i prossimi giorni: apri questa scheda per controllare dove e quando lavorerai.'
+  },
+  {
+    target: '#new-request-fab-btn',
+    title: 'Nuova richiesta',
+    // Step interattivo: qui deve essere l'utente a toccare davvero il pulsante "+"
+    // (vedi interactive:true più sotto), non basta premere "Avanti".
+    text: 'Tocca il pulsante "+" per aprire il modulo con cui chiedere le ferie o un cambio turno.',
+    interactive: true
+  },
+  {
+    target: '#req-ferie-fields',
+    title: 'Richiedere le ferie',
+    text: 'Con "Ferie" selezionata, tocca qui e scegli dal calendario il periodo che ti serve, dal primo all\'ultimo giorno.',
+    onEnter: () => setRequestType('ferie')
+  },
+  {
+    target: '#req-cambio-fields',
+    title: 'Richiedere un cambio turno',
+    text: 'Passa su "Cambio turno" e scegli quale dei tuoi turni vuoi cambiare: ti verrà proposto in automatico il turno opposto (mattina/pomeriggio).',
+    onEnter: () => setRequestType('cambio')
+  },
+  {
+    target: '#req-submit-btn',
+    title: 'Invia la richiesta',
+    text: 'Puoi aggiungere una nota facoltativa, poi tocca qui per inviare: chi gestisce i turni la riceverà subito e ti farà sapere l\'esito.'
+  },
+  {
+    target: '#tab-richieste-btn',
+    title: 'Le mie richieste',
+    text: 'Qui trovi tutte le richieste che hai inviato, con il loro stato: in attesa, approvata o rifiutata.',
+    onEnter: () => { closeRequestModal(); switchTab('richieste'); }
+  }
+];
+
+let tourStepIndex = 0;
+// Riferimenti usati solo dallo step interattivo (tocco reale sul pulsante "+"),
+// per poter rimuovere il listener quando si avanza, si salta o si arriva a un
+// altro step in cui non serve più.
+let tourClickTarget = null;
+let tourClickHandler = null;
+
+function maybeStartAppTour() {
+  if (localStorage.getItem(APP_TOUR_KEY)) { maybeShowNotifOnboarding(); return; }
+  setTimeout(startAppTour, 500);
+}
+
+function startAppTour() {
+  tourStepIndex = 0;
+  document.getElementById('tour-blocker').classList.remove('hidden');
+  document.getElementById('tour-highlight').classList.remove('hidden');
+  document.getElementById('tour-tooltip').classList.remove('hidden');
+  window.addEventListener('resize', positionTourStep);
+  renderTourStep();
+}
+
+// Rimuove l'eventuale listener in attesa di un tocco reale e ripristina il
+// blocker (che normalmente impedisce di interagire con l'app sotto il tour).
+function clearTourClickWait() {
+  if (tourClickTarget && tourClickHandler) {
+    tourClickTarget.removeEventListener('click', tourClickHandler);
+  }
+  tourClickTarget = null;
+  tourClickHandler = null;
+  document.getElementById('tour-blocker').style.pointerEvents = '';
+}
+
+// Quanto restare "scoperti" (senza vignetta) mentre l'azione reale dello step
+// (cambio scheda, apertura/chiusura modale...) si vede e si anima da sola,
+// prima che la vignetta si sposti sul nuovo elemento.
+const TOUR_ACTION_PAUSE_MS = 550;
+
+function renderTourStep() {
+  clearTourClickWait();
+  const step = APP_TOUR_STEPS[tourStepIndex];
+  if (step.onEnter) {
+    // Si nasconde subito vignetta e fumetto per non coprire l'animazione reale
+    // (tab che cambia, modale che si apre/chiude...): l'utente la vede scorrere
+    // "pulita", poi la vignetta compare sul nuovo bersaglio.
+    document.getElementById('tour-highlight').classList.add('hidden');
+    document.getElementById('tour-tooltip').classList.add('hidden');
+    step.onEnter();
+    setTimeout(() => showTourStepUI(step), TOUR_ACTION_PAUSE_MS);
+  } else {
+    showTourStepUI(step);
+  }
+}
+
+function showTourStepUI(step) {
+  document.getElementById('tour-highlight').classList.remove('hidden');
+  document.getElementById('tour-tooltip').classList.remove('hidden');
+  document.getElementById('tour-step-title').textContent = step.title;
+  document.getElementById('tour-step-text').textContent = step.text;
+  const nextBtn = document.getElementById('tour-next-btn');
+  if (step.interactive) {
+    // Nasconde "Avanti": si prosegue solo toccando davvero l'elemento reale.
+    // Il blocker lascia passare i click e ci mettiamo in ascolto sul pulsante.
+    nextBtn.classList.add('hidden');
+    document.getElementById('tour-blocker').style.pointerEvents = 'none';
+    const el = document.querySelector(step.target);
+    if (el) {
+      tourClickTarget = el;
+      tourClickHandler = () => nextTourStep();
+      el.addEventListener('click', tourClickHandler, { once: true });
+    }
+  } else {
+    nextBtn.classList.remove('hidden');
+    nextBtn.textContent = tourStepIndex === APP_TOUR_STEPS.length - 1 ? 'Fatto' : 'Avanti';
+  }
+  document.getElementById('tour-dots').innerHTML = APP_TOUR_STEPS.map((_, i) =>
+    `<span class="h-1.5 rounded-full transition-all ${i === tourStepIndex ? 'w-5 bg-brand-600' : 'w-1.5 bg-slate-200'}"></span>`
+  ).join('');
+  // Un frame di respiro prima di misurare il tooltip (deve essere visibile per
+  // avere offsetWidth/offsetHeight corretti da usare nel posizionamento).
+  requestAnimationFrame(positionTourStep);
+}
+
+function positionTourStep() {
+  const step = APP_TOUR_STEPS[tourStepIndex];
+  const el = document.querySelector(step.target);
+  const highlight = document.getElementById('tour-highlight');
+  const tooltip = document.getElementById('tour-tooltip');
+  if (!el) { nextTourStep(); return; }
+
+  const rect = el.getBoundingClientRect();
+  const pad = 8;
+  highlight.style.top = (rect.top - pad) + 'px';
+  highlight.style.left = (rect.left - pad) + 'px';
+  highlight.style.width = (rect.width + pad * 2) + 'px';
+  highlight.style.height = (rect.height + pad * 2) + 'px';
+  // Lo "spotlight" si ottiene con un'ombra enorme intorno al riquadro trasparente:
+  // tutto lo schermo si scurisce tranne il rettangolo evidenziato.
+  highlight.style.boxShadow = '0 0 0 9999px rgba(15,23,42,0.72)';
+
+  const tooltipH = tooltip.offsetHeight || 150;
+  const tooltipW = tooltip.offsetWidth || 288;
+  const spaceBelow = window.innerHeight - rect.bottom;
+  let top = (spaceBelow > tooltipH + 28) ? rect.bottom + pad + 12 : rect.top - pad - tooltipH - 12;
+  top = Math.max(16, Math.min(top, window.innerHeight - tooltipH - 16));
+  let left = rect.left + rect.width / 2 - tooltipW / 2;
+  left = Math.max(16, Math.min(left, window.innerWidth - tooltipW - 16));
+  tooltip.style.top = top + 'px';
+  tooltip.style.left = left + 'px';
+}
+
+function nextTourStep() {
+  feedback('tap');
+  clearTourClickWait();
+  if (tourStepIndex < APP_TOUR_STEPS.length - 1) {
+    tourStepIndex++;
+    renderTourStep();
+  } else {
+    endAppTour();
+  }
+}
+
+function skipAppTour() {
+  feedback('tap');
+  endAppTour();
+}
+
+function endAppTour() {
+  clearTourClickWait();
+  localStorage.setItem(APP_TOUR_KEY, '1');
+  document.getElementById('tour-blocker').classList.add('hidden');
+  document.getElementById('tour-highlight').classList.add('hidden');
+  document.getElementById('tour-tooltip').classList.add('hidden');
+  window.removeEventListener('resize', positionTourStep);
+  // In caso di "Salta" a metà tour, il modulo richiesta potrebbe essere aperto
+  // e la tab potrebbe essere rimasta su "richieste": si riporta tutto allo
+  // stato iniziale prima di chiedere le notifiche.
+  closeRequestModal();
+  switchTab('turni', true);
+  maybeShowNotifOnboarding();
+}
+
+/* ---------------------------------------------------------------- reset nascosto tour (solo per test) ----
+   Tenendo premuto ~1,8s il nome in alto a sinistra si dimenticano le due
+   chiavi di localStorage che segnano "tour già visto" / "notifiche già
+   proposte", e si ricarica la pagina: al ricaricamento riparte tutto da capo
+   come al primo accesso. Comodo per ritestare senza aprire DevTools. ---- */
+let tourResetTriggerBound = false;
+function setupTourResetTrigger() {
+  if (tourResetTriggerBound) return; // evita doppio binding se initAfterAuth gira più volte
+  tourResetTriggerBound = true;
+  const el = document.getElementById('app-emp-name');
+  if (!el) return;
+  const HOLD_MS = 1800;
+  let pressTimer = null;
+
+  const start = () => {
+    clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => {
+      localStorage.removeItem(APP_TOUR_KEY);
+      localStorage.removeItem(NOTIF_ONBOARDING_KEY);
+      showToast('Tour resettato: si riavvia al ricaricamento...', 'success');
+      setTimeout(() => location.reload(), 700);
+    }, HOLD_MS);
+  };
+  const cancel = () => clearTimeout(pressTimer);
+
+  el.addEventListener('pointerdown', start);
+  el.addEventListener('pointerup', cancel);
+  el.addEventListener('pointerleave', cancel);
+  el.addEventListener('pointercancel', cancel);
+}
+
+
+/* ---------------------------------------------------------------- onboarding notifiche (primo avvio) ----
+   Come nelle app "vere": invece di lasciare che sia il dipendente a dover notare e
+   toccare la campanella, al primo avvio (una sola volta per dispositivo/browser,
+   tramite localStorage) mostriamo noi una schermata che spiega perché conviene
+   attivarle, con un bottone che a quel punto fa scattare il prompt nativo del
+   sistema/browser (che il sito NON può mai saltare o mostrare da solo, per
+   policy di privacy dei browser: serve sempre un tocco esplicito dell'utente). ---- */
+const NOTIF_ONBOARDING_KEY = 'notifOnboardingSeen_dipendenti';
+
+function maybeShowNotifOnboarding() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'default') return; // già deciso in passato
+  if (localStorage.getItem(NOTIF_ONBOARDING_KEY)) return; // già mostrato una volta
+  setTimeout(() => {
+    document.getElementById('notif-onboarding-backdrop').classList.remove('hidden');
+  }, 600);
+}
+
+function closeNotifOnboarding() {
+  feedback('close');
+  localStorage.setItem(NOTIF_ONBOARDING_KEY, '1');
+  document.getElementById('notif-onboarding-backdrop').classList.add('hidden');
+}
+
+async function handleNotifOnboardingAccept() {
+  closeNotifOnboarding();
+  await requestSystemNotificationPermission();
+}
+
+function handleNotifOnboardingDismiss() {
+  closeNotifOnboarding();
+}
+
+// Toglie eventuali tag HTML (es. <strong>) da un testo prima di usarlo come corpo
+// di una notifica di sistema: le notifiche mostrano solo testo semplice, quindi tag
+// come <strong> comparirebbero letteralmente invece di essere interpretati.
+function stripHtml(str) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = str || '';
+  return tmp.textContent || tmp.innerText || '';
+}
+
+async function showSystemNotification(title, body, tag) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.ready;
+      // Niente campo "icon": su Android/One UI comparirebbe insieme al badge,
+      // cioè due icone nella stessa notifica. Con solo "badge" (sagoma bianca
+      // trasparente, non il logo a colori) resta una sola icona pulita, sia
+      // nella notifica sia in barra di stato.
+      reg.showNotification(title, { body: stripHtml(body), badge: 'icons/icon-badge-96.png', vibrate: [200, 100, 200], tag, renotify: true });
+    } else {
+      new Notification(title, { body: stripHtml(body) });
+    }
+  } catch (e) { console.error('Notifica di sistema fallita:', e); }
+}
+
+// Sottoscrizione realtime alle proprie richieste: appena chi gestisce i turni
+// approva/rifiuta, arriva un avviso immediato (badge + notifica di sistema),
+// senza aspettare che il dipendente riapra l'app.
+// LIMITE IMPORTANTE: questa sottoscrizione funziona solo mentre l'app è aperta
+// e la sua connessione realtime è attiva. Se il telefono blocca lo schermo, mette
+// l'app in background a lungo, o la chiude del tutto, il sistema operativo/browser
+// sospende l'esecuzione di questo codice: eventuali richieste approvate/rifiutate
+// in quel momento NON generano una notifica (non è possibile recuperarle in un
+// secondo momento, l'evento realtime va perso). È il motivo per cui a volte la
+// notifica non arriva. Per notifiche affidabili anche ad app chiusa servirebbero
+// vere Web Push (Service Worker + VAPID + invio lato server), non ancora presenti.
+let myRichiesteRealtimeChannel = null;
+function subscribeMyRichiesteRealtime() {
+  if (!supabaseClient || !me) return;
+  if (myRichiesteRealtimeChannel) {
+    try { supabaseClient.removeChannel(myRichiesteRealtimeChannel); } catch (e) { /* ignora */ }
+  }
+  myRichiesteRealtimeChannel = supabaseClient
+    .channel('richieste-mie-live')
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'richieste', filter: `employee_id=eq.${me.id}` }, async (payload) => {
+      const nuovoStato = payload.new.stato;
+      const vecchioStato = payload.old.stato;
+      if (nuovoStato === vecchioStato || nuovoStato === 'in_attesa') return;
+      await loadAllData();
+      const esito = nuovoStato === 'approvata' ? 'approvata' : 'rifiutata';
+      // Per i cambi turno approvati, la nota scritta dall'admin (nota_admin) indica
+      // sempre dove il dipendente lavorerà e chi copre il turno di partenza: la si
+      // usa come corpo della notifica di sistema al posto del generico "approvata/
+      // rifiutata", così anche chi non riapre subito l'app sa già dove presentarsi.
+      const corpo = (nuovoStato === 'approvata' && payload.new.nota_admin)
+        ? payload.new.nota_admin
+        : `La tua richiesta è stata ${esito}`;
+      showSystemNotification(`Richiesta ${esito}`, corpo, `richiesta-${payload.new.id}`);
+    })
+    .subscribe();
+}
+
+// Quando l'app torna in primo piano (schermo riacceso, tab tornata attiva) si
+// aggiornano subito i dati e si rinnova la sottoscrizione realtime: non recupera
+// notifiche perse nel frattempo, ma almeno mostra lo stato aggiornato senza dover
+// chiudere e riaprire l'app, e riduce le occasioni in cui la connessione realtime
+// resta agganciata a una sessione ormai caduta.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && me) {
+    loadAllData();
+    subscribeMyRichiesteRealtime();
+  }
+});
+
+function switchTab(tab, silent) {
+  if (!silent) feedback('switch');
+  currentTab = tab;
+  document.getElementById('view-turni').classList.toggle('hidden', tab !== 'turni');
+  document.getElementById('view-richieste').classList.toggle('hidden', tab !== 'richieste');
+  document.getElementById('tab-turni-btn').classList.toggle('active', tab === 'turni');
+  document.getElementById('tab-richieste-btn').classList.toggle('active', tab === 'richieste');
+  if (tab === 'richieste') markRichiesteAsSeen();
+}
+
+function renderTurni() {
+  const el = document.getElementById('view-turni');
+  if (myShifts.length === 0) {
+    el.innerHTML = '<p class="text-sm text-slate-400 text-center py-10">Nessun turno in programma.</p>';
+    return;
+  }
+  el.innerHTML = myShifts.map(s => {
+    const turnoCap = s.turno.charAt(0).toUpperCase() + s.turno.slice(1);
+    const mallName = s.malls?.name || '—';
+    const hours = allMalls.find(m => m.name === mallName)?.hours?.[s.turno];
+    const orario = hours ? `${hours.start} – ${hours.end}` : '';
+    return `
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-soft p-4 mb-3 flex items-center gap-3">
+      <div class="w-12 h-12 shrink-0 rounded-xl bg-brand-50 text-brand-600 flex flex-col items-center justify-center font-display font-extrabold text-xs leading-tight">
+        <span>${fmtDate(s.shift_date).split(' ')[1]}</span>
+        <span class="text-[10px] uppercase">${fmtDate(s.shift_date).split(' ')[2]}</span>
+      </div>
+      <div class="flex-1 min-w-0">
+        <p class="font-semibold text-sm text-slate-800">${mallName} · ${turnoCap}</p>
+        <p class="text-xs text-slate-500">${fmtDate(s.shift_date)}${orario ? ' · ' + orario : ''}</p>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function statusLabel(stato) {
+  return { in_attesa: ['In attesa', 'badge-attesa'], approvata: ['Approvata', 'badge-approvata'], rifiutata: ['Rifiutata', 'badge-rifiutata'] }[stato] || [stato, ''];
+}
+function requestDetailText(r) {
+  if (r.tipo === 'ferie') {
+    return r.data_a && r.data_a !== r.data_da ? `Dal ${fmtDate(r.data_da)} al ${fmtDate(r.data_a)}` : fmtDate(r.data_da);
+  }
+  return `${fmtDate(r.data_da)}: da ${capIt(r.turno)} a ${capIt(r.turno_desiderato)}`;
+}
+function renderRichieste() {
+  const el = document.getElementById('view-richieste');
+  if (myRequests.length === 0) {
+    el.innerHTML = '<p class="text-sm text-slate-400 text-center py-10">Non hai ancora inviato richieste.</p>';
+    return;
+  }
+  el.innerHTML = myRequests.map(r => {
+    const [label, cls] = statusLabel(r.stato);
+    const titolo = r.tipo === 'ferie' ? 'Richiesta ferie' : 'Cambio turno';
+    const dettaglio = requestDetailText(r);
+    return `
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-soft p-4 mb-3">
+      <div class="flex items-start justify-between gap-2 mb-1.5">
+        <p class="font-semibold text-sm text-slate-800">${titolo}</p>
+        <span class="badge ${cls}">${label}</span>
+      </div>
+      <p class="text-xs text-slate-500">${dettaglio}</p>
+      <p class="text-[11px] text-slate-400 mt-1.5">Inviata il ${fmtDate(r.created_at.slice(0,10))}</p>
+      ${r.nota ? `<p class="text-xs text-slate-600 mt-2 italic">"${r.nota}"</p>` : ''}
+      ${r.nota_admin ? `<p class="text-xs mt-2 bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-600"><i class="fa-solid fa-reply mr-1"></i>${r.nota_admin}</p>` : ''}
+    </div>`;
+  }).join('');
+}
+
+/* ---------------------------------------------------------------- nuova richiesta ---- */
+function openRequestModal() {
+  feedback('open');
+  document.getElementById('request-backdrop').classList.remove('hidden');
+  document.getElementById('req-error').classList.add('hidden');
+  document.getElementById('req-ferie-da').value = '';
+  document.getElementById('req-ferie-a').value = '';
+  document.getElementById('req-ferie-period-label').textContent = 'Seleziona le date...';
+  document.getElementById('req-ferie-period-label').parentElement.classList.add('text-slate-400');
+  document.getElementById('req-cambio-shift').value = '';
+  document.getElementById('req-cambio-shift-label').textContent = myShifts.length === 0 ? 'Nessun turno futuro assegnato' : 'Seleziona un turno...';
+  document.getElementById('req-cambio-shift-label').parentElement.classList.add('text-slate-400');
+  document.getElementById('req-nota').value = '';
+  document.getElementById('req-cambio-riepilogo').classList.add('hidden');
+  setRequestType('ferie', true);
+}
+function closeRequestModal(silent) {
+  if (!silent) feedback('close');
+  document.getElementById('request-backdrop').classList.add('hidden');
+}
+function setRequestType(type, silent) {
+  if (!silent) feedback('select');
+  currentReqType = type;
+  document.getElementById('req-type-ferie').classList.toggle('active', type === 'ferie');
+  document.getElementById('req-type-cambio').classList.toggle('active', type === 'cambio');
+  document.getElementById('req-ferie-fields').classList.toggle('hidden', type !== 'ferie');
+  document.getElementById('req-cambio-fields').classList.toggle('hidden', type !== 'cambio');
+  if (type === 'cambio') updateCambioRiepilogo();
+}
+function opposto(turno) { return turno === 'mattina' ? 'pomeriggio' : 'mattina'; }
+function capIt(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+
+/* ---------------------------------------------------------------- calendario personalizzato (periodo ferie) ----
+   Sostituisce l'input type="date" nativo (che apre il calendario di sistema Android/iOS)
+   con un mini-calendario disegnato ad hoc, coerente con lo stile del resto dell'app.
+   Selezione a due tocchi: primo tocco = inizio periodo, secondo tocco = fine periodo
+   (se tocchi lo stesso giorno o confermi subito, vale come un solo giorno). ---- */
+let drViewMonth = null;   // Date: primo giorno del mese visualizzato nel calendario
+let drStart = null;       // Date selezionata come inizio
+let drEnd = null;         // Date selezionata come fine (può restare null = un solo giorno)
+const drMinDate = (() => { const d = new Date(); d.setHours(0,0,0,0); return d; })();
+
+function drIsoDate(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function drSameDay(a, b) { return a && b && drIsoDate(a) === drIsoDate(b); }
+
+function openDateRangePicker() {
+  feedback('open');
+  const existingDa = document.getElementById('req-ferie-da').value;
+  const existingA = document.getElementById('req-ferie-a').value;
+  drStart = existingDa ? new Date(existingDa + 'T00:00:00') : null;
+  drEnd = existingA ? new Date(existingA + 'T00:00:00') : null;
+  drViewMonth = new Date((drStart || new Date()).getFullYear(), (drStart || new Date()).getMonth(), 1);
+  document.getElementById('daterange-backdrop').classList.remove('hidden');
+  renderDrCalendar();
+}
+function closeDateRangePicker(silent) {
+  if (!silent) feedback('close');
+  document.getElementById('daterange-backdrop').classList.add('hidden');
+}
+function drShiftMonth(delta) {
+  feedback('tap');
+  drViewMonth.setMonth(drViewMonth.getMonth() + delta);
+  renderDrCalendar();
+}
+function drSelectDay(iso) {
+  feedback('select');
+  const clicked = new Date(iso + 'T00:00:00');
+  if (!drStart || (drStart && drEnd)) {
+    drStart = clicked; drEnd = null;
+  } else if (drSameDay(clicked, drStart)) {
+    drEnd = clicked;
+  } else if (clicked < drStart) {
+    drEnd = drStart; drStart = clicked;
+  } else {
+    drEnd = clicked;
+  }
+  renderDrCalendar();
+}
+function renderDrCalendar() {
+  const label = drViewMonth.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
+  document.getElementById('dr-month-label').textContent = label;
+
+  const year = drViewMonth.getFullYear(), month = drViewMonth.getMonth();
+  const firstOfMonth = new Date(year, month, 1);
+  // Lunedì = 0 ... Domenica = 6
+  const firstWeekday = (firstOfMonth.getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  let html = '';
+  for (let i = 0; i < firstWeekday; i++) html += '<div></div>';
+  for (let day = 1; day <= daysInMonth; day++) {
+    const cellDate = new Date(year, month, day);
+    const iso = drIsoDate(cellDate);
+    const disabled = cellDate < drMinDate;
+    const isStart = drSameDay(cellDate, drStart);
+    const isEnd = drSameDay(cellDate, drEnd);
+    const inRange = drStart && drEnd && cellDate > drStart && cellDate < drEnd;
+    const isToday = drSameDay(cellDate, drMinDate);
+
+    let cls = 'w-full aspect-square flex items-center justify-center text-sm rounded-lg transition-colors ';
+    if (disabled) cls += 'text-slate-300';
+    else if (isStart || isEnd) cls += 'bg-brand-600 text-white font-bold';
+    else if (inRange) cls += 'bg-brand-100 text-brand-700 font-semibold';
+    else cls += 'text-slate-700 hover:bg-slate-100 font-medium' + (isToday ? ' ring-1 ring-brand-300' : '');
+
+    html += disabled
+      ? `<div class="${cls}">${day}</div>`
+      : `<button type="button" onclick="drSelectDay('${iso}')" class="${cls}">${day}</button>`;
+  }
+  document.getElementById('dr-grid').innerHTML = html;
+}
+function confirmDateRangePicker() {
+  if (!drStart) { closeDateRangePicker(); return; }
+  feedback('confirm');
+  const da = drIsoDate(drStart);
+  const a = drEnd ? drIsoDate(drEnd) : '';
+  document.getElementById('req-ferie-da').value = da;
+  document.getElementById('req-ferie-a').value = a;
+  const labelEl = document.getElementById('req-ferie-period-label');
+  labelEl.textContent = (a && a !== da) ? `Dal ${fmtDate(da)} al ${fmtDate(a)}` : fmtDate(da);
+  labelEl.parentElement.classList.remove('text-slate-400');
+  closeDateRangePicker(true);
+}
+
+function renderCambioShiftOptions() {
+  const btn = document.getElementById('req-cambio-shift-btn');
+  document.getElementById('req-cambio-shift').value = '';
+  document.getElementById('req-cambio-shift-label').textContent = myShifts.length === 0 ? 'Nessun turno futuro assegnato' : 'Seleziona un turno...';
+  btn.disabled = myShifts.length === 0;
+  btn.classList.toggle('opacity-60', myShifts.length === 0);
+  updateCambioRiepilogo();
+}
+
+/* ---------------------------------------------------------------- modale selezione turno (cambio) ----
+   Sostituisce la combobox nativa con un elenco di card ben leggibili (giorno, centro,
+   turno) — così è subito chiaro dove e quando si lavora quel giorno, senza dover
+   interpretare una singola riga di testo dentro un menu a tendina di sistema. ---- */
+function openShiftPicker() {
+  if (myShifts.length === 0) return;
+  feedback('open');
+  const listEl = document.getElementById('shiftpicker-list');
+  const selectedId = document.getElementById('req-cambio-shift').value;
+  listEl.innerHTML = myShifts.map(s => {
+    const turnoCap = capIt(s.turno);
+    const mallName = s.malls?.name || '—';
+    const hours = allMalls.find(m => m.name === mallName)?.hours?.[s.turno];
+    const orario = hours ? `${hours.start} – ${hours.end}` : '';
+    const isSelected = s.id === selectedId;
+    return `
+    <button type="button" onclick="selectShiftForCambio('${s.id}')"
+      class="w-full flex items-center gap-3 p-3 mb-2 rounded-xl border text-left transition-colors ${isSelected ? 'border-brand-500 bg-brand-50' : 'border-slate-200 hover:bg-slate-50'}">
+      <div class="w-12 h-12 shrink-0 rounded-xl bg-brand-50 text-brand-600 flex flex-col items-center justify-center font-display font-extrabold text-xs leading-tight">
+        <span>${fmtDate(s.shift_date).split(' ')[1]}</span>
+        <span class="text-[10px] uppercase">${fmtDate(s.shift_date).split(' ')[2]}</span>
+      </div>
+      <div class="flex-1 min-w-0">
+        <p class="font-semibold text-sm text-slate-800 truncate">${mallName} · ${turnoCap}</p>
+        <p class="text-xs text-slate-500">${fmtDate(s.shift_date)}${orario ? ' · ' + orario : ''}</p>
+      </div>
+      ${isSelected ? '<i class="fa-solid fa-circle-check text-brand-600"></i>' : ''}
+    </button>`;
+  }).join('');
+  document.getElementById('shiftpicker-backdrop').classList.remove('hidden');
+}
+function closeShiftPicker(silent) {
+  if (!silent) feedback('close');
+  document.getElementById('shiftpicker-backdrop').classList.add('hidden');
+}
+function selectShiftForCambio(shiftId) {
+  const shift = myShifts.find(s => s.id === shiftId);
+  if (!shift) return;
+  feedback('select');
+  document.getElementById('req-cambio-shift').value = shiftId;
+  const turnoCap = capIt(shift.turno);
+  const mallName = shift.malls?.name || '—';
+  document.getElementById('req-cambio-shift-label').textContent = `${fmtDate(shift.shift_date)} · ${mallName} · ${turnoCap}`;
+  document.getElementById('req-cambio-shift-label').parentElement.classList.remove('text-slate-400');
+  closeShiftPicker(true);
+  updateCambioRiepilogo();
+}
+
+// Il cambio turno è sempre automatico: si passa dal proprio turno a quello
+// opposto (mattina↔pomeriggio) nello stesso giorno. Il riepilogo mostrato al
+// dipendente non indica il centro: la logistica la decide chi gestisce i turni
+// una volta approvata la richiesta.
+function updateCambioRiepilogo() {
+  const shiftId = document.getElementById('req-cambio-shift').value;
+  const box = document.getElementById('req-cambio-riepilogo');
+  const shift = myShifts.find(s => s.id === shiftId);
+  if (!shift) { box.classList.add('hidden'); return; }
+  document.getElementById('req-cambio-riepilogo-text').innerHTML =
+    `${fmtDate(shift.shift_date)}: da <strong>${capIt(shift.turno)}</strong> a <strong>${capIt(opposto(shift.turno))}</strong>`;
+  box.classList.remove('hidden');
+}
+
+/* ---------------------------------------------------------------- richieste incompatibili ----
+   Prima di inviare una nuova richiesta, verifichiamo che non vada in conflitto con
+   richieste già esistenti (in attesa o approvate — quelle rifiutate non contano più,
+   il dipendente è libero di ririchiedere). Copre:
+   - ferie su un periodo che si sovrappone a ferie già richieste/approvate
+   - cambio turno su un giorno coperto da ferie già richieste/approvate
+   - cambio turno duplicato sullo stesso giorno
+   - richieste per date passate
+   (un cambio turno, anche confermato, NON blocca una richiesta di ferie: il
+   dipendente deve poterle sempre chiedere se ne ha necessità)
+   Ritorna il messaggio d'errore da mostrare, oppure null se non ci sono conflitti. ---- */
+function rangesOverlap(aFrom, aTo, bFrom, bTo) {
+  return aFrom <= bTo && bFrom <= aTo;
+}
+
+function findRequestConflict(payload) {
+  if (payload.data_da < todayStr()) {
+    return 'Non puoi inviare una richiesta per una data già passata.';
+  }
+
+  const attive = myRequests.filter(r => r.stato !== 'rifiutata');
+
+  for (const r of attive) {
+    if (!rangesOverlap(payload.data_da, payload.data_a, r.data_da, r.data_a)) continue;
+
+    const periodo = requestDetailText(r);
+    const inAttesa = r.stato !== 'approvata';
+
+    if (payload.tipo === 'ferie' && r.tipo === 'ferie') {
+      return inAttesa
+        ? `Hai già una richiesta ferie in attesa per questo periodo (${periodo}).`
+        : `Hai già le ferie approvate per questo periodo (${periodo}).`;
+    }
+    // Nota: un cambio turno (in attesa o già confermato) NON blocca una richiesta
+    // di ferie sullo stesso periodo — il dipendente deve poter chiedere le ferie
+    // quando ne ha bisogno anche se aveva già ottenuto un cambio turno.
+    if (payload.tipo === 'cambio' && r.tipo === 'ferie') {
+      return inAttesa
+        ? `Non puoi chiedere il cambio turno: hai già una richiesta ferie in attesa per questo periodo (${periodo}).`
+        : `Non puoi chiedere il cambio turno: hai le ferie approvate per questo periodo (${periodo}).`;
+    }
+    if (payload.tipo === 'cambio' && r.tipo === 'cambio') {
+      return inAttesa
+        ? `Hai già una richiesta di cambio turno in attesa per ${periodo}.`
+        : `Hai già un cambio turno approvato per ${periodo}.`;
+    }
+  }
+
+  return null;
+}
+
+async function submitRequest() {
+  const errorEl = document.getElementById('req-error');
+  errorEl.classList.add('hidden');
+  const nota = document.getElementById('req-nota').value.trim() || null;
+  const btn = document.getElementById('req-submit-btn');
+
+  let payload;
+  if (currentReqType === 'ferie') {
+    const da = document.getElementById('req-ferie-da').value;
+    const a = document.getElementById('req-ferie-a').value;
+    if (!da) { errorEl.textContent = 'Indica la data di inizio.'; errorEl.classList.remove('hidden'); feedback('error'); return; }
+    if (a && a < da) { errorEl.textContent = 'La data di fine non può precedere quella di inizio.'; errorEl.classList.remove('hidden'); feedback('error'); return; }
+    payload = { employee_id: me.id, tipo: 'ferie', data_da: da, data_a: a || da, nota };
+  } else {
+    const shiftId = document.getElementById('req-cambio-shift').value;
+    if (!shiftId) { errorEl.textContent = 'Seleziona il turno da cambiare.'; errorEl.classList.remove('hidden'); feedback('error'); return; }
+    const shift = myShifts.find(s => s.id === shiftId);
+    payload = {
+      employee_id: me.id, tipo: 'cambio',
+      data_da: shift.shift_date, mall_id: shift.mall_id, turno: shift.turno,
+      data_a: shift.shift_date, mall_desiderato_id: shift.mall_id, turno_desiderato: opposto(shift.turno),
+      nota
+    };
+  }
+
+  const conflitto = findRequestConflict(payload);
+  if (conflitto) { errorEl.textContent = conflitto; errorEl.classList.remove('hidden'); feedback('warning'); return; }
+
+  btn.disabled = true; btn.textContent = 'Invio in corso...';
+  const { error } = await supabaseClient.from('richieste').insert(payload);
+  btn.disabled = false; btn.textContent = 'Invia richiesta';
+  if (error) {
+    errorEl.textContent = 'Impossibile inviare la richiesta. Riprova.';
+    errorEl.classList.remove('hidden');
+    feedback('error');
+    return;
+  }
+  closeRequestModal(true);
+  showToast('Richiesta inviata', 'success');
+  await loadAllData();
+  switchTab('richieste', true);
+}
+
+/* ---------------------------------------------------------------- avvio ---- */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw-dipendenti.js').catch((e) => console.error('Registrazione service worker fallita:', e));
+  });
+}
+(async function boot() {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (session) { await initAfterAuth(); } else { showLoginScreen(); }
+})();
+</script>
+</body>
+</html>

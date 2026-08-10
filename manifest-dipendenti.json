@@ -1,0 +1,27 @@
+{
+  "id": "/Index.html",
+  "name": "Le mie Richieste",
+  "short_name": "Richieste",
+  "description": "App dipendenti per turni e richieste di ferie/cambio turno",
+  "start_url": "./Index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f8fafc",
+  "theme_color": "#2f5fe0",
+  "lang": "it",
+  "icons": [
+    {
+      "src": "icons/logo-01.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/logo-01-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
